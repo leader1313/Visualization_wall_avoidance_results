@@ -1,0 +1,13 @@
+*.pyc
+*.pt
+*.pickle
+*.png
+*.pdf
+*.mp4
+.vscode/*
+Data/
+Videos/
+etc/
+*__pycache__
+.DS_Store
+*.json
