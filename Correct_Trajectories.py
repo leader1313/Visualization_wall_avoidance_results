@@ -13,7 +13,7 @@ from gym.wrappers import Monitor
 
 class CorrectTraj:
     def __init__(self, envname):
-        self.env = Monitor(gym.make(envname), './video', force=True)
+        self.env = Monitor(gym.make(envname), './Videos/gym_video', force=True)
         # self.env = gym.make(envname)
         self.STEP_LIMIT = self.env.STEP_LIMIT
         self.results = {}

@@ -31,15 +31,17 @@ class DisturbancedDemonstration:
         i = 0
         while i < MAX_TRAJ:
             i += 1
-
+        # Fail---------------------------------------------------------
             S, A, R = self.env.sample(
                 1, policy=self.sup, render=True, cov=torch.tensor([0.4, 0.1]))
             injected_d_x = self.env.results['Trajectories']['Fail'][0][2][:, 0]
             injected_d_y = self.env.results['Trajectories']['Fail'][0][2][:, 1]
+        # Success---------------------------------------------------------
             # S, A, R = self.env.sample(
             #     1, policy=self.sup, render=True, cov=self.disturbance_generator)
             # injected_d_x = self.env.results['Trajectories']['Success'][0][2][:, 0]
             # injected_d_y = self.env.results['Trajectories']['Success'][0][2][:, 1]
+
             injected_disturbance_levels = (
                 injected_d_x**2 + injected_d_y**2).sqrt()
             _, file_name = now_stamp()
