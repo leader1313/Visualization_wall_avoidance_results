@@ -16,7 +16,7 @@ class Test:
 
 
 if __name__ == "__main__":
-    policy = torch.load("Data/MHGP-BDI/0/2/learning.pickle")["learner"]
+    policy = torch.load("Data/MHGP-BDI/0/5/learning.pickle")["learner"]
     learner = Learner(policy=policy, Learning=False)
     test = Test(learner=learner)
     test.testLearner()

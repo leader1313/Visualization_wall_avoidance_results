@@ -22,5 +22,6 @@ class Learner:
         else:
             value, label = var.min(0)
             action = action[label[0], 0].diag()
+            var = var[label[0], 0].diag()
 
-        return action
+        return action, var

@@ -8,6 +8,12 @@ from os.path import isfile, join
 import re
 from utils import now_stamp
 
+'''
+goal: 
+    data -> figs
+    figs -> video
+'''
+
 
 class VideoMaker():
     def __init__(self, dataset=None, G=None, video_name='video_name'):
@@ -25,7 +31,7 @@ class VideoMaker():
 
     # snapshots from learning process -------
 
-    def get_disturbance_figure(self, step):
+    def get_disturbance_figure(self, step, dir=None):
         plt.style.use("ggplot")
         injected_disturbances = self.dataset
 
@@ -47,15 +53,17 @@ class VideoMaker():
         # state-dependent disturbance
         line = plt.plot(X, Y, color='tomato', linewidth=5)
 
-        file_name = self.figure_dir + 'frame' + str(step)
+        file_name = dir + 'frame' + str(step)
         plt.savefig(file_name)
         plt.clf()
 
-    def make_figs(self):
+    def make_figs(self, get_figs=None):
+        if get_figs is None:
+            os.error
         D = self.dataset
         max_steps = D.shape[0]
         for i in range(max_steps):
-            self.get_disturbance_figure(i)
+            get_figs(i, dir=self.figure_dir)
             done = int(i / (max_steps - 1) * 10)
             bar = u"\u2588" * done + ' ' * (10 - done)
             per = (i + 1) * 100 / max_steps
@@ -110,5 +118,5 @@ if __name__ == '__main__':
 
     # Video making
     videoMaker = VideoMaker(dataset=dataset, video_name='test')
-    videoMaker.make_figs()
+    videoMaker.make_figs(get_figs=videoMaker.get_disturbance_figure)
     videoMaker.figure2video()

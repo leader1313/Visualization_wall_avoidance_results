@@ -12,8 +12,12 @@ from gym.wrappers import Monitor
 
 
 class CorrectTraj:
-    def __init__(self, envname):
-        self.env = Monitor(gym.make(envname), './Videos/gym_video', force=True)
+    def __init__(self, envname, monitoring_dir=None):
+        if monitoring_dir is None:
+            self.env = gym.make(envname)
+        else:
+            self.env = Monitor(
+                gym.make(envname), './Videos/gym_video/' + monitoring_dir, force=False)
         # self.env = gym.make(envname)
         self.STEP_LIMIT = self.env.STEP_LIMIT
         self.results = {}
@@ -29,6 +33,7 @@ class CorrectTraj:
 
         s = []  # state
         a = []  # action
+        v = []  # variance
         r = []  # reward
         d = []  # disturbance
 
@@ -54,7 +59,7 @@ class CorrectTraj:
                     action = policy.action_decision(
                         state, goal_state=optimal_traj[-1])
             else:
-                action = policy.action_decision(
+                action, var = policy.action_decision(
                     state[None, :], goal_flag=goal_flag)
 
             # noise injection ----------------------------
@@ -82,16 +87,18 @@ class CorrectTraj:
 
             s.append(state)
             a.append(action)
+            v.append(var)
             r.append(reward)
 
             state = state_dash
         self.env.close()
 
-        return torch.stack(s), torch.stack(a), torch.stack(r), torch.stack(d)
+        return torch.stack(s), torch.stack(a), torch.stack(v), torch.stack(r), torch.stack(d)
 
     def sample(self, Max_iter=2, policy=None, render=False, cov=0.0):
         S = []
         A = []
+        V = []
         R = []
         demo = []
         Trajectories = {"Success": [], "Fail": []}
@@ -101,7 +108,7 @@ class CorrectTraj:
         max_patient = 1
         while i < Max_iter and p < max_patient:
             i += 1
-            s, a, r, d = self.episode(
+            s, a, v, r, d = self.episode(
                 policy=policy, render=render, goal_flag=which_goal, cov=cov
             )
             print("iter:", i, "reward:", sum(r))
@@ -116,10 +123,11 @@ class CorrectTraj:
                 p = 0
                 max_patient *= 1
                 which_goal = not which_goal
-                S.append(s)
-                A.append(a)
-                R.append(r)
                 Trajectories["Success"].append([s, a, d])
+            S.append(s)
+            A.append(a)
+            V.append(v)
+            R.append(r)
             demo.append(r[-1] * 100.0)
         demo = torch.stack(demo)
         interbal = torch.tensor(demo.shape[0]).sqrt().int()
@@ -136,9 +144,9 @@ class CorrectTraj:
         self.results["Supervisor"] = policy
         self.results["Trajectories"] = Trajectories
         try:
-            return torch.cat(S), torch.cat(A), torch.cat(R)
+            return torch.cat(S), torch.cat(A), torch.cat(V), torch.cat(R)
         except:
-            return S, A, R
+            return S, A, V, R
 
     def obs_to_state(self, obs):
         # return torch.tensor(obs).float()
@@ -167,7 +175,7 @@ if __name__ == "__main__":
     i = 0
     while i < MAX_TRAJ:
         i += 1
-        S, A, R = env.sample(1, policy=policy, render=True, cov=cov)
+        S, A, R = env.sample(2, policy=policy, render=True, cov=cov)
         repo.save_data(
             S, dir_path="Data/Trajectory/", file_name="optimal_traj" + str(i)
         )
