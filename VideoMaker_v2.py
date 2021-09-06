@@ -9,64 +9,65 @@ import re
 from utils import now_stamp
 
 '''
-goal: 
+goal:
     data -> figs
     figs -> video
 '''
 
 
 class VideoMaker():
-    def __init__(self, dataset=None, G=None, video_name='video_name'):
+    def __init__(self, video_name='video_name'):
         yd_string, time_string = now_stamp()
         dir_ID = video_name + '/' + yd_string
         self.figure_dir = 'Figures/' + dir_ID + '/' + time_string + '/'
-        self.video_dir = 'Videos/' + dir_ID
+        self.video_dir = 'Videos/' + dir_ID + '/'
         dirs = {'fig': self.figure_dir, 'video': self.video_dir}
         for key in dirs:
             if not os.path.exists(dirs[key]):
                 os.makedirs(dirs[key])
 
         self.file_name = time_string
-        self.dataset = dataset
 
     # snapshots from learning process -------
 
-    def get_disturbance_figure(self, step, dir=None):
+    def get_plot(self, step, dataset, color='navy', alpha=1.0, linewidth=5):
         plt.style.use("ggplot")
-        injected_disturbances = self.dataset
+        xx = torch.linspace(1, step + 1, steps=step)
+        yy = dataset[:step]
+        plt.plot(xx, yy, color=color, linewidth=linewidth, alpha=alpha)
 
-        X = torch.linspace(1, step + 1, steps=step + 1)
-        Y = injected_disturbances[:step+1]
-
-        # plt.xlim(0, self.dataset.shape[0])
+    def get_figure(self, step):
         plt.xlim(0, 220)
         plt.ylim(0, 1.0)
         plt.xticks(fontsize=10)
         plt.yticks(fontsize=10)
 
-        # state-independent disturbance
-        fail_max_step = 110
-        xx = torch.linspace(1, fail_max_step, steps=fail_max_step)
-        yy = torch.ones(fail_max_step) * 0.41
-        baseline = plt.plot(xx, yy, color='navy', linewidth=5)
-
-        # state-dependent disturbance
-        line = plt.plot(X, Y, color='tomato', linewidth=5)
-
-        file_name = dir + 'frame' + str(step)
+        file_name = self.figure_dir + 'frame' + str(step)
         plt.savefig(file_name)
         plt.clf()
+        # plt.show()
 
-    def make_figs(self, get_figs=None):
-        if get_figs is None:
-            os.error
-        D = self.dataset
-        max_steps = D.shape[0]
-        for i in range(max_steps):
-            get_figs(i, dir=self.figure_dir)
-            done = int(i / (max_steps - 1) * 10)
+    def make_figs(self, main_dataset, sub_dataset=None, main_color='tomato', sub_alpha=1.0, linewidth=5, get_fig=None):
+        if get_fig is None:
+            os.error()
+        if sub_dataset is not None:
+            sub_plot = True
+            sub_max_step = sub_dataset.shape[0]
+        else:
+            sub_plot = False
+
+        max_step = main_dataset.shape[0]
+
+        for i in range(max_step):
+            if sub_plot:
+                self.get_plot(sub_max_step, sub_dataset,
+                              color='navy', alpha=sub_alpha, linewidth=linewidth)
+            self.get_plot(i, main_dataset, color=main_color,
+                          linewidth=linewidth)
+            get_fig(i)
+            done = int(i / (max_step - 1) * 10)
             bar = u"\u2588" * done + ' ' * (10 - done)
-            per = (i + 1) * 100 / max_steps
+            per = (i + 1) * 100 / max_step
             print('\r[{}] {} %'.format(bar, per), end='')
 
     # figures to video ----------------------
@@ -113,10 +114,10 @@ class VideoMaker():
 
 if __name__ == '__main__':
     # Import data set
-    dataset = torch.load('Data/Disturbances/141223.pickle')
-    # dataset = torch.load('Data/Disturbances/144719.pickle')
+    MGP = torch.load('Data/Disturbances/144719.pickle')
+    MHGP = torch.load('Data/Disturbances/141223.pickle')
 
-    # Video making
-    videoMaker = VideoMaker(dataset=dataset, video_name='test')
-    videoMaker.make_figs(get_figs=videoMaker.get_disturbance_figure)
-    videoMaker.figure2video()
+    videoMaker = VideoMaker(video_name='test')
+    get_fig = videoMaker.get_figure
+    # videoMaker.make_figs(main_dataset=MHGP, sub_dataset=MGP)
+    videoMaker.make_figs(main_dataset=MHGP, get_fig=get_fig)
