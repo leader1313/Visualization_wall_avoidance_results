@@ -13,8 +13,9 @@ class ComparisonModels():
         self.success_rate = dataset['success_rate']
         results = torch.stack(
             dataset['test_results']).float() * 100
+        interbal = 5
         self.success_rate['std'] = torch.stack(
-            [results[i * 2:i * 2 + 2].mean() for i in range(int(results.shape[0] / 2))]).std()
+            [results[i * interbal:i * interbal + interbal].mean() for i in range(int(results.shape[0] / interbal))]).std()
         print(dataset.keys())
 
     def demo_results(self, ID):
@@ -22,8 +23,10 @@ class ComparisonModels():
                              '/test_demo_results.pickle')
         self.success_rate = dataset['success_rate']
         results = torch.stack(dataset['test_results']).float() * 100
+        # results = torch.stack(dataset['test_results']).repeat(10).float() * 100
+        interbal = 5
         self.success_rate['std'] = torch.stack(
-            [results[i * 3:i * 3 + 3].mean() for i in range(int(results.shape[0] / 3))]).std()
+            [results[i * interbal:i * interbal + interbal].mean() for i in range(int(results.shape[0] / interbal))]).std()
         print(dataset.keys())
 
 
@@ -67,3 +70,9 @@ class UHGP_BC(ComparisonModels):
         name = "UHGP-BDI"
         color = "grey"
         super().__init__(dir_path, name, color)
+
+
+if __name__ == "__main__":
+    mhgp_bdi = MHGP_BDI(
+        dir_path="/Users/hanbit-o/code/Visualization_wall_avoidance_results/Data/Result/ShaftInsertion/MHGP-BDI/0")
+    mhgp_bdi.demo_results(ID="2/20210908demo/20210908_181345demo/_random")
