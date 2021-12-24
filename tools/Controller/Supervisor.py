@@ -110,14 +110,18 @@ class AlgorithmicSupervisor:
 
 
 class TrajectoryMaker(AlgorithmicSupervisor):
+    def __init__(self, goal_flag, action_dim):
+        super().__init__(action_dim)
+
+        if goal_flag == "L":
+            self.goal_flag = -1
+        else:
+            self.goal_flag = 1
+
     def action_decision(self, state, goal_flag=False, goal_state=None):
-        """
-        action1: Velocity of vertical Components
-        action2: Velocity component to the target
-        """
         C_pose = state.squeeze()
         # optimal trajectory making --------------------
-        flag = 1  # left: -1, right: 1
+        flag = self.goal_flag  # left: -1, right: 1
         sub1 = torch.tensor([8.25 * flag, 1.0])
         sub2 = torch.tensor([8.25 * flag, -2.0])
         sub3 = torch.tensor([8.25 * flag, -6.0])
@@ -127,7 +131,8 @@ class TrajectoryMaker(AlgorithmicSupervisor):
         goals = [sub1, sub2, sub3, goal]
         # goals = [sub1, sub2, goal]
         distance = ((C_pose - goals[self.junction]) ** 2).sum()
-        if distance < 0.01:
+        # if distance < 0.01:
+        if distance < 0.02:
             self.junction += 1
             # self.E = torch.zeros(self.action_dim)
             # self.int_E = torch.zeros(self.action_dim)
@@ -143,10 +148,79 @@ class TrajectoryMaker(AlgorithmicSupervisor):
             old_E=self.E,
             old_IE=self.int_E,
         )
-        action *= 0.5
-        if self.junction == 1:
-            action *= 0.4
-        elif self.junction == 2:
-            action *= 0.5
+        # Cautious expert
+        # action *= 0.5
+        # if self.junction == 1 or self.junction == 2:
+        #     # action *= 0.3
+        #     action = action / abs(action)
+        #     action *= 0.2
+        # elif self.junction == 3:
+        #     action *= 0.5
 
+        # Rough expert
+        action *= 0.5
+        # if self.junction == 1 or self.junction == 2:
+        #     # action *= 0.3
+        #     action = action / abs(action)
+        #     action *= 0.2
+        # elif self.junction == 3:
+        #     action *= 0.5
+
+        return action.float()
+
+
+class ComplexTrajectoryMaker(AlgorithmicSupervisor):
+    def __init__(self, goal_flag):
+        super().__init__(action_dim=2)
+        if goal_flag == 0:
+            self.goal_flag = -0.975
+        elif goal_flag == 1:
+            self.goal_flag = -0.325
+        elif goal_flag == 2:
+            self.goal_flag = 0.325
+        elif goal_flag == 3:
+            self.goal_flag = 0.975
+
+    def action_decision(self, state, goal_flag=False, goal_state=None):
+        C_pose = state.squeeze()
+        # optimal trajectory making --------------------
+        flag = self.goal_flag  # h1:-0.975, h2:-0.325, h3:0.325, h4:0.975
+
+        sub1 = torch.tensor([8.25 * flag, 0.5])
+        sub2 = torch.tensor([8.25 * flag, -2.0])
+        sub3 = torch.tensor([8.25 * flag, -6.0])
+        goal = torch.tensor([0.0, -9.1])
+        goals = [sub1, sub2, sub3, goal]
+        # if abs(self.goal_flag) > 0.5:
+        #     sub0 = torch.tensor([8.25 * flag, 9.0])
+        #     goals = [sub0, sub1, sub2, sub3, goal]
+        # goals = [sub1, sub2, goal]
+        distance = ((C_pose - goals[self.junction]) ** 2).sum()
+        # if distance < 0.01:
+        if distance < 0.02:
+            self.junction += 1
+        # if distance < 0.5 and self.junction < len(goals) - 1:
+        #     self.junction += 1
+
+        G_pose = goals[self.junction]
+
+        action, self.E, self.int_E = self.PID_controller(
+            C_pose,
+            G_pose,
+            P=0.7,  # * abs(flag),
+            D=0.01,
+            I=0.0,
+            # P=5, D=0.1, I=0.0,
+            old_E=self.E,
+            old_IE=self.int_E,
+        )
+        # Cautious expert
+        # action *= 0.5
+        if self.junction == 1 or self.junction == 2:
+            # action *= 0.3
+            action = action / abs(action)
+            action *= 0.2
+        # elif self.junction == 3:
+        #     action *= 0.5
+        action = torch.clamp(action, min=-1, max=1).float()
         return action.float()

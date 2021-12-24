@@ -1,4 +1,5 @@
 import os
+import torch
 
 
 def count_dirs_files(path):
@@ -11,6 +12,17 @@ def count_dirs_files(path):
 
     print("{:,} files, {:,} folders".format(files, folders))
     return files, folders
+
+
+def point_approximation(dataset):
+    N = dataset.shape[0]
+    interbal = torch.tensor(N).sqrt().int()
+    means = torch.stack(
+        [dataset[i: i + interbal].mean() for i in range(int(N / interbal))]
+    )
+    mean = dataset.mean()
+    std = means.std()
+    return mean, std
 
 
 def count_dirs(path):

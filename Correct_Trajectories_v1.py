@@ -1,24 +1,17 @@
 # import numpy as np
-from datetime import datetime, timezone, timedelta
+import sys
 from tools.Controller.Supervisor import TrajectoryMaker
 from tools.Utils.repository import Repository
+from tools.Utils.Utils import point_approximation
 import torch
 import gym
-import sys
-import os
-from gym.wrappers import Monitor
 
-# sys.path.append("gp_pytorch")
+sys.path.append("gp_pytorch")
 
 
 class CorrectTraj:
-    def __init__(self, envname, monitoring_dir=None):
-        if monitoring_dir is None:
-            self.env = gym.make(envname)
-        else:
-            self.env = Monitor(
-                gym.make(envname), './Videos/gym_video/' + monitoring_dir, force=False)
-        # self.env = gym.make(envname)
+    def __init__(self, envname):
+        self.env = gym.make(envname)
         self.STEP_LIMIT = self.env.STEP_LIMIT
         self.results = {}
 
@@ -33,7 +26,6 @@ class CorrectTraj:
 
         s = []  # state
         a = []  # action
-        v = []  # variance
         r = []  # reward
         d = []  # disturbance
 
@@ -48,7 +40,6 @@ class CorrectTraj:
                 # self.env.render(mode='rgb_array')
 
             command = torch.empty(self.env.actionsize)
-            # print("ACTION_SIZE: ", self.env.actionsize)
             # action ------------------------------------
             if policy.__class__.__name__ == "AlgorithmicSupervisor":
                 optimal_traj = policy.optimal_traj[goal_flag]
@@ -59,10 +50,11 @@ class CorrectTraj:
                 else:
                     action = policy.action_decision(
                         state, goal_state=optimal_traj[-1])
+            elif policy.__class__.__name__ == "ComplexTrajectoryMaker":
+                action = policy.action_decision(state)
             else:
-                action, var = policy.action_decision(
+                action = policy.action_decision(
                     state[None, :], goal_flag=goal_flag)
-            # print("ACTION: ", action)
 
             # noise injection ----------------------------
             try:
@@ -80,8 +72,6 @@ class CorrectTraj:
                 # print(cov_s[0])
                 d.append(cov_s[0])
 
-            # print("COMMAND: ", command)
-
             # command = torch.clamp(command, min=-1.0, max=1.0)
             # print(command)
 
@@ -91,66 +81,64 @@ class CorrectTraj:
 
             s.append(state)
             a.append(action)
-            v.append(var)
             r.append(reward)
 
             state = state_dash
         self.env.close()
 
-        return torch.stack(s), torch.stack(a), torch.stack(v), torch.stack(r), torch.stack(d)
+        return torch.stack(s), torch.stack(a), torch.stack(r), torch.stack(d)
 
-    def sample(self, Max_iter=2, policy=None, render=False, cov=0.0):
+    def sample(self, Max_traj=2, Max_iter=2, policy=None, render=False, cov=0.0):
+        """
+        - Demo evaluating mode
+            Sample 10 demonstration for evaluating demo successrate
+            demo results
+
+        """
         S = []
         A = []
-        V = []
         R = []
-        demo = []
         Trajectories = {"Success": [], "Fail": []}
-
         which_goal = True
-        f, p, i = 0, 0, 0
-        max_patient = 1
-        while i < Max_iter and p < max_patient:
-            i += 1
-            s, a, v, r, d = self.episode(
-                policy=policy, render=render, goal_flag=which_goal, cov=cov
-            )
-            print("iter:", i, "reward:", sum(r))
-            if all(r == 0):
-                print("FAIL-------------------")
-                i -= 1
-                p += 1
-                f += 1
-                Trajectories["Fail"].append([s, a, d])
-            else:
-                print("SUCCESS-------------------")
-                p = 0
-                max_patient *= 1
-                which_goal = not which_goal
-                Trajectories["Success"].append([s, a, d])
-            S.append(s)
-            A.append(a)
-            V.append(v)
-            R.append(r)
-            demo.append(r[-1] * 100.0)
-        demo = torch.stack(demo)
-        interbal = torch.tensor(demo.shape[0]).sqrt().int()
-        demo_success_means = torch.stack(
-            [demo[i: i + interbal].mean() for i in range(interbal)]
-        )
+        while torch.tensor(R).sum() < Max_traj:
+            i = 0
+            i_goal = 0
+            print(torch.tensor(R).sum())
+            while i < Max_iter:
+                if policy.__class__.__name__ == "ComplexTrajectoryMaker":
+                    # policy.__init__(goal_flag=torch.randint(0, 4, (1,))) # random
+                    policy.__init__(goal_flag=i_goal % 4)  # sequential
+                i += 1
+                s, a, r, d = self.episode(
+                    policy=policy, render=render, goal_flag=which_goal, cov=cov
+                )
+                print("iter:", i, "reward:", sum(r))
+                if all(r == 0):
+                    print("FAIL-------------------")
+                    Trajectories["Fail"].append([s, a, d])
+                else:
+                    print("SUCCESS-------------------")
+                    which_goal = not which_goal
+                    i_goal += 1
+                    Trajectories["Success"].append([s, a, d])
 
-        self.results["demo_success_rate"] = {
-            "list": demo,
-            "mean": demo.mean(),
-            "std": demo_success_means.std(),
-        }
-        self.results["injection_noise"] = cov
-        self.results["Supervisor"] = policy
+                R.append(r[-1])
+            R = torch.cat(R)
+            print("Demo results: {} S | {} F".format(
+                R.sum(), Max_iter - R.sum()))
+            mm, ss = point_approximation(R * 100)
+            print("mean {}% | std {}%".format(mm, ss))
+
+        # if mm >= 50:
+        # Append two success trajs
+        S = [Trajectories["Success"][:Max_traj][i][0] for i in range(Max_traj)]
+        A = [Trajectories["Success"][:Max_traj][i][1] for i in range(Max_traj)]
+
         self.results["Trajectories"] = Trajectories
         try:
-            return torch.cat(S), torch.cat(A), torch.cat(V), torch.cat(R)
+            return torch.cat(S), torch.cat(A), R
         except:
-            return S, A, V, R
+            return S, A, R
 
     def obs_to_state(self, obs):
         # return torch.tensor(obs).float()
@@ -170,8 +158,10 @@ if __name__ == "__main__":
     # params: tau=0.02, Step_Limit = 1000,
 
     repo = Repository()
-    env = CorrectTraj(envname="Myenv:slit-v0")
-    policy = TrajectoryMaker(action_dim=2)
+    env_name = "wideslit-v0"
+    # env = CorrectTraj(envname="Myenv:slit-v0")
+    env = CorrectTraj(envname="Myenv:" + env_name)
+    policy = TrajectoryMaker(action_dim=2, goal_flag="R")
     # policy = HumanSupervisor()
     cov = torch.tensor([0.0, 0.0])
 
@@ -179,8 +169,10 @@ if __name__ == "__main__":
     i = 0
     while i < MAX_TRAJ:
         i += 1
-        S, A, R = env.sample(2, policy=policy, render=True, cov=cov)
+        S, A, R = env.sample(3, policy=policy, render=True, cov=cov)
         repo.save_data(
-            S, dir_path="Data/Trajectory/", file_name="optimal_traj" + str(i)
+            S,
+            dir_path="Data/Trajectory/",
+            file_name="test_traj_" + env_name + str(i),
         )
         print(S.shape[0])
